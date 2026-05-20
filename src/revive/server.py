@@ -1,3 +1,4 @@
+import logging
 import os
 import threading
 from pathlib import Path
@@ -7,6 +8,14 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
+
+logging.basicConfig(
+    level=os.environ.get("REVIVE_LOG_LEVEL", "INFO").upper(),
+    format="%(asctime)s %(levelname)-5s %(name)s: %(message)s",
+    datefmt="%H:%M:%S",
+)
+logging.getLogger("itchat").setLevel(logging.INFO)
+log = logging.getLogger("revive.server")
 
 
 app = FastAPI()
@@ -97,16 +106,62 @@ state = LoginState()
 def _run_itchat_login(generation: int) -> None:
     try:
         import itchat
+        from itchat.components import login as itchat_login
 
         core = itchat.Core()
+        log.info("[gen=%d] itchat.auto_login starting", generation)
+
+        original_check_login = itchat_login.check_login
+        check_count = {"n": 0}
+
+        def _check_login_with_log(self, uuid=None):
+            check_count["n"] += 1
+            n = check_count["n"]
+            import time as _t
+            t0 = _t.monotonic()
+            log.info("[gen=%d] check_login #%d → calling weixin.qq.com (long-poll)…", generation, n)
+            try:
+                # 给微信的长轮询一个硬上限，否则 requests 会无限 hang
+                self.s.request = _wrap_request_with_timeout(self.s.request, 30)
+                result = original_check_login(self, uuid=uuid)
+                log.info("[gen=%d] check_login #%d → returned %r in %.1fs",
+                         generation, n, result, _t.monotonic() - t0)
+                return result
+            except Exception as e:
+                log.warning("[gen=%d] check_login #%d → raised %s after %.1fs",
+                            generation, n, e.__class__.__name__, _t.monotonic() - t0)
+                raise
+
+        itchat_login.check_login = _check_login_with_log
+        # 同名属性也挂到 core 上，因为 load_login 已经把方法绑给实例了
+        core.check_login = _check_login_with_log.__get__(core, type(core))
+
+        def _qr_cb(uuid, status, qrcode):
+            log.info("[gen=%d] qrCallback uuid=%s status=%s qr_bytes=%d",
+                     generation, uuid, status, len(qrcode) if qrcode else 0)
+            state.on_qr(generation, uuid, status, qrcode)
+
+        def _login_cb():
+            log.info("[gen=%d] loginCallback fired (login successful)", generation)
+            state.on_logged_in(generation)
+
         core.auto_login(
             hotReload=False,
             enableCmdQR=False,
-            qrCallback=lambda uuid, status, qrcode: state.on_qr(generation, uuid, status, qrcode),
-            loginCallback=lambda: state.on_logged_in(generation),
+            qrCallback=_qr_cb,
+            loginCallback=_login_cb,
         )
+        log.info("[gen=%d] itchat.auto_login returned", generation)
     except Exception as exc:
+        log.exception("[gen=%d] itchat.auto_login crashed", generation)
         state.on_failed(generation, str(exc))
+
+
+def _wrap_request_with_timeout(orig_request, default_timeout: float):
+    def wrapped(method, url, **kwargs):
+        kwargs.setdefault("timeout", default_timeout)
+        return orig_request(method, url, **kwargs)
+    return wrapped
 
 
 @app.post("/api/wechat/login/start")
