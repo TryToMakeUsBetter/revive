@@ -6,6 +6,10 @@ const router = useRouter()
 function goWeChatAuth() {
   router.push({ name: 'wechat-auth' })
 }
+
+function goChat() {
+  router.push({ name: 'chat' })
+}
 </script>
 
 <template>
@@ -15,7 +19,16 @@ function goWeChatAuth() {
       <p class="subtitle">一个轻量的微信对话助手</p>
 
       <section class="settings">
-        <h2>设置</h2>
+        <h2>调试</h2>
+        <button class="setting-row" @click="goChat">
+          <div class="setting-text">
+            <div class="setting-title">网页对话</div>
+            <div class="setting-desc">绕开微信，直接和机器人在网页里聊</div>
+          </div>
+          <span class="arrow">›</span>
+        </button>
+
+        <h2 style="margin-top: 24px;">设置</h2>
         <button class="setting-row" @click="goWeChatAuth">
           <div class="setting-text">
             <div class="setting-title">微信授权</div>

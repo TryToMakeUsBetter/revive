@@ -4,10 +4,16 @@ import threading
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
+
+from .bot import ChatBot
+from .config import load_full_config
+from .llm import DeepSeek
+from .web_client import WebChatClient
 
 logging.basicConfig(
     level=os.environ.get("REVIVE_LOG_LEVEL", "INFO").upper(),
@@ -189,6 +195,82 @@ def get_qr() -> Response:
         media_type="image/png",
         headers={"Cache-Control": "no-store"},
     )
+
+
+# ---------- Web 调试聊天 ----------
+
+DEFAULT_SYSTEM_PROMPT = "你是一个友好的助手，用简短自然的口语回复。"
+
+
+def _build_web_bot() -> tuple[ChatBot, WebChatClient]:
+    cfg = load_full_config()
+    log.info(
+        "web chat init: whitelist_enabled=%s friends=%d groups=%d",
+        cfg.whitelist.enabled,
+        len(cfg.whitelist.friends),
+        len(cfg.whitelist.groups),
+    )
+    client = WebChatClient()
+    bot = ChatBot(
+        llm=DeepSeek(api_key=cfg.deepseek_api_key),
+        client=client,
+        whitelist_enabled=False,  # Web 调试入口不走白名单
+        friend_whitelist=set(),
+        group_whitelist=set(),
+        system_prompt=DEFAULT_SYSTEM_PROMPT,
+    )
+    client.register_handler(bot.handle)
+    return bot, client
+
+
+_web_bot: Optional[ChatBot] = None
+_web_client: Optional[WebChatClient] = None
+_web_lock = threading.Lock()
+
+
+def _ensure_web_bot() -> WebChatClient:
+    global _web_bot, _web_client
+    with _web_lock:
+        if _web_client is None:
+            _web_bot, _web_client = _build_web_bot()
+    return _web_client
+
+
+class ChatRequest(BaseModel):
+    session_id: str
+    message: str
+
+
+class ChatResponse(BaseModel):
+    replies: list[str]
+
+
+@app.post("/api/chat", response_model=ChatResponse)
+def post_chat(req: ChatRequest) -> ChatResponse:
+    if not req.message.strip():
+        raise HTTPException(status_code=400, detail="message 不能为空")
+    try:
+        client = _ensure_web_bot()
+    except Exception as exc:
+        log.exception("初始化 web bot 失败")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    log.info("web chat session=%s text=%r", req.session_id, req.message[:80])
+    try:
+        replies = client.deliver(req.session_id, "web-user", req.message)
+    except Exception as exc:
+        log.exception("web chat handle 失败")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return ChatResponse(replies=replies)
+
+
+@app.post("/api/chat/reset")
+def reset_chat(session_id: str) -> dict:
+    if _web_bot is not None:
+        _web_bot.histories.pop(session_id, None)
+    return {"ok": True}
+
+
+# ---------- 前端静态资源 ----------
 
 
 def _find_frontend_dist() -> Path:
