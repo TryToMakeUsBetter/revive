@@ -1,1 +1,4 @@
 requests>=2.31.0
+itchat-uos==1.5.0.dev0
+fastapi>=0.110.0
+uvicorn>=0.29.0

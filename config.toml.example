@@ -1,0 +1,8 @@
+[deepseek]
+# 在 https://platform.deepseek.com 申请，然后复制到这里
+api_key = "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+
+[whitelist]
+# 是否启用白名单。enabled=false 时机器人会回复所有消息（私聊+被@的群消息）。
+# 启用后，私聊按好友微信号匹配 whitelist.txt，群聊按群名匹配。
+enabled = false

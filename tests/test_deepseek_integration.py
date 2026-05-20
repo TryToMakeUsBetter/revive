@@ -7,13 +7,10 @@ Tests are skipped automatically when no key is found.
 """
 
 import os
-import sys
 import unittest
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
-from llm import DeepSeek, Message
+from revive import DeepSeek, Message
 
 
 CONFIG_PATH = Path(__file__).parent / "deepseek_test.config"
