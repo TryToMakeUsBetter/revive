@@ -1,15 +1,15 @@
-from .llm import DeepSeek, LLM, Message, Role
-from .wechat import IncomingMessage, ItchatClient, MessageHandler, WeChatClient
 from .bot import ChatBot
+from .chat import ChatClient, IncomingMessage, MessageHandler, WebChatClient
+from .llm import DeepSeek, LLM, Message, Role
 
 __all__ = [
     "ChatBot",
+    "ChatClient",
     "DeepSeek",
     "IncomingMessage",
-    "ItchatClient",
     "LLM",
     "Message",
     "MessageHandler",
     "Role",
-    "WeChatClient",
+    "WebChatClient",
 ]

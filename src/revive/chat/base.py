@@ -7,7 +7,7 @@ from typing import Callable
 class IncomingMessage:
     sender_id: str
     sender_name: str
-    sender_wxid: str | None
+    sender_account: str | None
     text: str
     is_group: bool
     group_name: str | None
@@ -17,7 +17,7 @@ class IncomingMessage:
 MessageHandler = Callable[[IncomingMessage], None]
 
 
-class WeChatClient(ABC):
+class ChatClient(ABC):
     @abstractmethod
     def login(self) -> None:
         ...

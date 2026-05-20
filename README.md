@@ -1,47 +1,46 @@
-# 目的
+# Revive
 
-本项目想要实现一个根据对话内容模拟对方语气和内容的agent
-希望通过此项目使自己熟悉记忆系统、agent开发和prompt相关的内容
+一个轻量级对话助手 —— FastAPI + Vue + DeepSeek。
 
 ## 项目结构
 
 ```
 revive/
 ├── src/revive/         # 后端包（pip install -e . 后可作为 revive 导入）
-│   ├── bot.py          # 消息编排
-│   ├── cli.py          # 命令行入口（itchat 模式）
-│   ├── server.py       # FastAPI + 前端静态托管
-│   ├── config.py       # config.toml / whitelist.txt 加载
-│   ├── llm/            # LLM 抽象与 DeepSeek 实现
-│   └── wechat/         # WeChat 抽象与 itchat 实现
+│   ├── bot.py          # 消息编排（ChatBot）
+│   ├── server.py       # FastAPI + 前端静态托管 + /api/chat
+│   ├── config.py       # config.toml 加载
+│   ├── chat/           # 聊天客户端抽象 + Web 实现
+│   └── llm/            # LLM 抽象与 DeepSeek 实现
 ├── frontend/           # Vue 前端
 ├── tests/              # 单元测试 + 集成测试
 ├── pyproject.toml
-├── config.toml.example
-└── whitelist.txt.example
+└── config.toml.example
 ```
 
 ## 快速开始
 
 ```bash
-# 1. 装依赖（editable 安装，保留改代码即生效的体验）
+# 1. 装后端（editable 安装，改代码即生效）
 pip install -e .
 
-# 2. 复制配置模板并填好 DeepSeek key / 白名单
+# 2. 复制配置模板并填 DeepSeek key
 cp config.toml.example config.toml
-cp whitelist.txt.example whitelist.txt   # 仅在启用白名单时需要
 
-# 3. 跑命令行版（终端扫码）
-revive
-# 等价于： python -m revive
-
-# 4. 跑带前端的服务（先 build 前端，再启 server）
+# 3. build 前端
 cd frontend && npm install && npm run build && cd ..
+
+# 4. 启动服务
 revive-server
 # 等价于： python -m revive.server
 ```
 
-环境变量覆盖：`REVIVE_CONFIG`（指定 config.toml 路径）、`REVIVE_WHITELIST`、`REVIVE_FRONTEND_DIST`。
+启动后浏览器自动打开 http://127.0.0.1:8000，点首页"开始对话"即可。
+
+环境变量：
+- `REVIVE_CONFIG`：config.toml 路径
+- `REVIVE_FRONTEND_DIST`：前端产物目录
+- `REVIVE_LOG_LEVEL`：日志级别（默认 INFO）
 
 ## 测试
 

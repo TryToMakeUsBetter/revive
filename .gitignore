@@ -7,6 +7,10 @@ dist/
 *.egg-info/
 src/*.egg-info/
 
+# 前端依赖与产物
+frontend/node_modules/
+frontend/dist/
+
 # 测试配置文件
 *_test.config
 *_integration_test.config
@@ -14,13 +18,5 @@ src/*.egg-info/
 # vscode 配置
 .vscode/*
 
-# itchat 登录缓存与二维码
-itchat.pkl
-QR.png
-
-# 微信白名单（本地真实配置，模板见 whitelist.txt.example）
-whitelist.txt
-
 # 本地配置文件（含 API key，模板见 config.toml.example）
 config.toml
-

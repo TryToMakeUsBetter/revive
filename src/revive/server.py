@@ -11,16 +11,15 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from .bot import ChatBot
-from .config import load_full_config
+from .chat import WebChatClient
+from .config import load_config
 from .llm import DeepSeek
-from .web_client import WebChatClient
 
 logging.basicConfig(
     level=os.environ.get("REVIVE_LOG_LEVEL", "INFO").upper(),
     format="%(asctime)s %(levelname)-5s %(name)s: %(message)s",
     datefmt="%H:%M:%S",
 )
-logging.getLogger("itchat").setLevel(logging.INFO)
 log = logging.getLogger("revive.server")
 
 
@@ -35,188 +34,18 @@ app.add_middleware(
 )
 
 
-class LoginState:
-    IDLE = "idle"
-    WAITING_QR = "waiting_qr"
-    WAITING_SCAN = "waiting_scan"
-    SCANNED = "scanned"
-    LOGGED_IN = "logged_in"
-    FAILED = "failed"
-
-    def __init__(self) -> None:
-        self.qr_png: Optional[bytes] = None
-        self.qr_version: int = 0
-        self.status: str = self.IDLE
-        self.uuid: Optional[str] = None
-        self.error: Optional[str] = None
-        self.lock = threading.Lock()
-        self.thread: Optional[threading.Thread] = None
-        self.generation: int = 0
-
-    def begin(self) -> int:
-        """开启新一轮登录，返回本轮 generation。旧轮的回调凭 generation 自动失效。"""
-        with self.lock:
-            self.qr_png = None
-            self.qr_version = 0
-            self.status = self.WAITING_QR
-            self.uuid = None
-            self.error = None
-            self.generation += 1
-            return self.generation
-
-    def on_qr(self, generation: int, uuid: str, status: str, qrcode: bytes) -> None:
-        with self.lock:
-            if generation != self.generation:
-                return
-            new_qr = uuid != self.uuid
-            self.uuid = uuid
-            if qrcode:
-                if qrcode != self.qr_png:
-                    self.qr_png = qrcode
-                    self.qr_version += 1
-
-            if new_qr:
-                self.status = self.WAITING_SCAN
-            elif status == "201":
-                self.status = self.SCANNED
-            # status "200" 留给 loginCallback 设 LOGGED_IN
-            # status "408"（轮询/超时）保持当前状态
-
-    def on_logged_in(self, generation: int) -> None:
-        with self.lock:
-            if generation != self.generation:
-                return
-            self.status = self.LOGGED_IN
-
-    def on_failed(self, generation: int, err: str) -> None:
-        with self.lock:
-            if generation != self.generation:
-                return
-            self.status = self.FAILED
-            self.error = err
-
-    def snapshot(self) -> dict:
-        with self.lock:
-            return {
-                "status": self.status,
-                "has_qr": self.qr_png is not None,
-                "qr_version": self.qr_version,
-                "uuid": self.uuid,
-                "error": self.error,
-            }
-
-
-state = LoginState()
-
-
-def _run_itchat_login(generation: int) -> None:
-    try:
-        import itchat
-        from itchat.components import login as itchat_login
-
-        core = itchat.Core()
-        log.info("[gen=%d] itchat.auto_login starting", generation)
-
-        original_check_login = itchat_login.check_login
-        check_count = {"n": 0}
-
-        def _check_login_with_log(self, uuid=None):
-            check_count["n"] += 1
-            n = check_count["n"]
-            import time as _t
-            t0 = _t.monotonic()
-            log.info("[gen=%d] check_login #%d → calling weixin.qq.com (long-poll)…", generation, n)
-            try:
-                # 给微信的长轮询一个硬上限，否则 requests 会无限 hang
-                self.s.request = _wrap_request_with_timeout(self.s.request, 30)
-                result = original_check_login(self, uuid=uuid)
-                log.info("[gen=%d] check_login #%d → returned %r in %.1fs",
-                         generation, n, result, _t.monotonic() - t0)
-                return result
-            except Exception as e:
-                log.warning("[gen=%d] check_login #%d → raised %s after %.1fs",
-                            generation, n, e.__class__.__name__, _t.monotonic() - t0)
-                raise
-
-        itchat_login.check_login = _check_login_with_log
-        # 同名属性也挂到 core 上，因为 load_login 已经把方法绑给实例了
-        core.check_login = _check_login_with_log.__get__(core, type(core))
-
-        def _qr_cb(uuid, status, qrcode):
-            log.info("[gen=%d] qrCallback uuid=%s status=%s qr_bytes=%d",
-                     generation, uuid, status, len(qrcode) if qrcode else 0)
-            state.on_qr(generation, uuid, status, qrcode)
-
-        def _login_cb():
-            log.info("[gen=%d] loginCallback fired (login successful)", generation)
-            state.on_logged_in(generation)
-
-        core.auto_login(
-            hotReload=False,
-            enableCmdQR=False,
-            qrCallback=_qr_cb,
-            loginCallback=_login_cb,
-        )
-        log.info("[gen=%d] itchat.auto_login returned", generation)
-    except Exception as exc:
-        log.exception("[gen=%d] itchat.auto_login crashed", generation)
-        state.on_failed(generation, str(exc))
-
-
-def _wrap_request_with_timeout(orig_request, default_timeout: float):
-    def wrapped(method, url, **kwargs):
-        kwargs.setdefault("timeout", default_timeout)
-        return orig_request(method, url, **kwargs)
-    return wrapped
-
-
-@app.post("/api/wechat/login/start")
-def start_login() -> dict:
-    gen = state.begin()
-    t = threading.Thread(target=_run_itchat_login, args=(gen,), daemon=True)
-    state.thread = t
-    t.start()
-    return state.snapshot()
-
-
-@app.get("/api/wechat/status")
-def get_status() -> dict:
-    return state.snapshot()
-
-
-@app.get("/api/wechat/qr")
-def get_qr() -> Response:
-    with state.lock:
-        png = state.qr_png
-    if not png:
-        return Response(status_code=404)
-    return Response(
-        content=png,
-        media_type="image/png",
-        headers={"Cache-Control": "no-store"},
-    )
-
-
-# ---------- Web 调试聊天 ----------
+# ---------- Web 对话 ----------
 
 DEFAULT_SYSTEM_PROMPT = "你是一个友好的助手，用简短自然的口语回复。"
 
 
 def _build_web_bot() -> tuple[ChatBot, WebChatClient]:
-    cfg = load_full_config()
-    log.info(
-        "web chat init: whitelist_enabled=%s friends=%d groups=%d",
-        cfg.whitelist.enabled,
-        len(cfg.whitelist.friends),
-        len(cfg.whitelist.groups),
-    )
+    cfg = load_config()
+    log.info("chat init: deepseek_key=%s", "set" if cfg.deepseek_api_key else "missing")
     client = WebChatClient()
     bot = ChatBot(
         llm=DeepSeek(api_key=cfg.deepseek_api_key),
         client=client,
-        whitelist_enabled=False,  # Web 调试入口不走白名单
-        friend_whitelist=set(),
-        group_whitelist=set(),
         system_prompt=DEFAULT_SYSTEM_PROMPT,
     )
     client.register_handler(bot.handle)
@@ -252,13 +81,13 @@ def post_chat(req: ChatRequest) -> ChatResponse:
     try:
         client = _ensure_web_bot()
     except Exception as exc:
-        log.exception("初始化 web bot 失败")
+        log.exception("初始化 bot 失败")
         raise HTTPException(status_code=500, detail=str(exc)) from exc
-    log.info("web chat session=%s text=%r", req.session_id, req.message[:80])
+    log.info("chat session=%s text=%r", req.session_id, req.message[:80])
     try:
         replies = client.deliver(req.session_id, "web-user", req.message)
     except Exception as exc:
-        log.exception("web chat handle 失败")
+        log.exception("chat handle 失败")
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     return ChatResponse(replies=replies)
 
