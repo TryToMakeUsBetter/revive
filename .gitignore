@@ -1,0 +1,7 @@
+*.pyc
+# 测试配置文件
+*_test.config
+*_integration_test.config
+
+# vscode 配置
+.vscode/*
