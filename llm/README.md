@@ -1,6 +1,12 @@
 # llm — 大语言模型客户端
 
-统一的 LLM 客户端抽象，通过工厂模式支持多种模型提供商。
+统一的 LLM 客户端抽象，基于 [openai](https://pypi.org/project/openai/) 官方 SDK，通过工厂模式支持多种模型提供商。
+
+## 依赖
+
+```bash
+pip install openai
+```
 
 ## 架构
 
@@ -59,10 +65,40 @@ client.reset()  # 清空历史
 
 ## 添加新模型
 
-1. 新建 `llm/your_provider.py`，继承 `BaseLLMClient`，**只需实现 `_send()`**
+1. 新建 `llm/your_provider.py`，继承 `BaseLLMClient`，**只需实现 `_send()`**：
+   ```python
+   from openai import OpenAI
+   from .base import BaseLLMClient
+
+   class YourProviderClient(BaseLLMClient):
+       def __init__(self, api_key, model, base_url, timeout=30.0,
+                    max_retries=2, **kwargs):
+           super().__init__(api_key=api_key, model=model, base_url=base_url,
+                            timeout=timeout, max_retries=max_retries)
+           self._client = OpenAI(api_key=self.api_key, base_url=self.base_url,
+                                 timeout=self.timeout, max_retries=self.max_retries,
+                                 **kwargs)
+
+       def _send(self) -> str:
+           response = self._client.chat.completions.create(
+               model=self.model, messages=self._messages,
+           )
+           return response.choices[0].message.content
+   ```
 2. 在 `factory.py` 的 `_PROVIDER_REGISTRY` 中注册：
    ```python
    from .your_provider import YourProviderClient
    _PROVIDER_REGISTRY["your_provider"] = YourProviderClient
    ```
-3. 在 `config.toml` 的 `[providers.your_provider]` 中配置 api_key 和 base_url
+3. 在 `config.toml` 中添加提供商配置：
+   ```toml
+   [providers.your_provider]
+   model = "your-model-name"
+   api_key = "sk-xxx"
+   base_url = "https://your.api.com/v1"
+   timeout = 30.0
+   max_retries = 2
+   # 以下为 openai SDK 专有字段，可选
+   organization = ""
+   project = ""
+   ```

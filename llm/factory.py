@@ -41,12 +41,16 @@ def create_client(provider: str | None = None) -> BaseLLMClient:
             f"提供商 '{provider}' 未配置 api_key，请在 config.toml 中设置 "
             f"或设置环境变量 {provider.upper()}_API_KEY"
         )
-    model = provider_cfg.get("model") or default_cfg.get("model", "deepseek-chat")
+    model = provider_cfg.get("model", "deepseek-chat")
 
     return client_cls(
         api_key=api_key,
         model=model,
         base_url=provider_cfg.get("base_url", ""),
+        timeout=provider_cfg.get("timeout", 30.0),
+        max_retries=provider_cfg.get("max_retries", 2),
+        organization=provider_cfg.get("organization"),
+        project=provider_cfg.get("project"),
     )
 
 

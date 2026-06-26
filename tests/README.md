@@ -5,8 +5,8 @@
 ## 运行测试
 
 ```bash
-# 在项目根目录下执行
-python -m unittest tests.test_integration -v
+# 在项目根目录下执行（需要 revive conda 环境）
+conda run -n revive python -m unittest tests.test_integration -v
 
 # 只跑某个测试类
 python -m unittest tests.test_integration.TestDeepSeekIntegration -v

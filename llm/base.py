@@ -11,11 +11,13 @@ class BaseLLMClient(ABC):
 
     VALID_ROLES = frozenset({"system", "user", "assistant", "tool"})
 
-    def __init__(self, api_key: str, model: str, base_url: str, timeout: float = 30.0):
+    def __init__(self, api_key: str, model: str, base_url: str,
+                 timeout: float = 30.0, max_retries: int = 2):
         self.api_key = api_key
         self.model = model
         self.base_url = base_url
         self.timeout = timeout
+        self.max_retries = max_retries
         self._messages: list[dict] = []
 
     # ── 公共方法 ──────────────────────────────────────────────
