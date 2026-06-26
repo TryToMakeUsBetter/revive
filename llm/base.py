@@ -17,15 +17,16 @@ class BaseLLMClient(ABC):
     """
 
     VALID_ROLES = frozenset({"system", "user", "assistant", "tool"})
-    MAX_TOOL_ROUNDS = 10  # 防止 tool_use 死循环
 
     def __init__(self, api_key: str, model: str, base_url: str,
-                 timeout: float = 30.0, max_retries: int = 2):
+                 timeout: float = 30.0, max_retries: int = 2,
+                 max_tool_rounds: int = 10):
         self.api_key = api_key
         self.model = model
         self.base_url = base_url
         self.timeout = timeout
         self.max_retries = max_retries
+        self.max_tool_rounds = max_tool_rounds  # tool_use 最大循环轮数
         self._messages: list[dict] = []
         self._tool_registry = ToolRegistry()
 
@@ -76,7 +77,7 @@ class BaseLLMClient(ABC):
 
         tools = self._tool_registry.to_openai_format() if use_tools else None
 
-        for _ in range(self.MAX_TOOL_ROUNDS):
+        for _ in range(self.max_tool_rounds):
             msg = self._send(tools=tools)
             tool_calls = msg.get("tool_calls")
 

@@ -49,6 +49,7 @@ def create_client(provider: str | None = None) -> BaseLLMClient:
         base_url=provider_cfg.get("base_url", ""),
         timeout=provider_cfg.get("timeout", 30.0),
         max_retries=provider_cfg.get("max_retries", 2),
+        max_tool_rounds=default_cfg.get("max_tool_rounds", 10),
         organization=provider_cfg.get("organization"),
         project=provider_cfg.get("project"),
     )

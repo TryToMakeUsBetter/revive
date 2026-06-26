@@ -13,9 +13,10 @@ class DeepSeekClient(BaseLLMClient):
 
     def __init__(self, api_key: str, model: str = "deepseek-chat",
                  base_url: str = "https://api.deepseek.com/v1", timeout: float = 30.0,
-                 max_retries: int = 2, **kwargs):
+                 max_retries: int = 2, max_tool_rounds: int = 10, **kwargs):
         super().__init__(api_key=api_key, model=model, base_url=base_url,
-                         timeout=timeout, max_retries=max_retries)
+                         timeout=timeout, max_retries=max_retries,
+                         max_tool_rounds=max_tool_rounds)
         self._client = OpenAI(
             api_key=self.api_key, base_url=self.base_url,
             timeout=self.timeout, max_retries=self.max_retries,
