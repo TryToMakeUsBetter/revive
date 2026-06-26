@@ -35,10 +35,16 @@ def create_client(provider: str | None = None) -> BaseLLMClient:
         raise ValueError(f"未知的提供商: {provider}，可选: {available}")
 
     provider_cfg = get_provider_config(provider)
+    api_key = provider_cfg.get("api_key", "")
+    if not api_key:
+        raise ValueError(
+            f"提供商 '{provider}' 未配置 api_key，请在 config.toml 中设置 "
+            f"或设置环境变量 {provider.upper()}_API_KEY"
+        )
     model = provider_cfg.get("model") or default_cfg.get("model", "deepseek-chat")
 
     return client_cls(
-        api_key=provider_cfg["api_key"],
+        api_key=api_key,
         model=model,
         base_url=provider_cfg.get("base_url", ""),
     )

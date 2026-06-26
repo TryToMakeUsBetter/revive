@@ -1,4 +1,4 @@
-"""chat 包：多模型聊天功能，支持 DeepSeek、OpenAI 等。"""
+"""llm 包：多模型 LLM 客户端，支持 DeepSeek、OpenAI 等。"""
 
 from .base import BaseLLMClient
 from .factory import create_client, list_providers

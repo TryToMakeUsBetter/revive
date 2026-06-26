@@ -21,17 +21,8 @@ class DeepSeekClient(BaseLLMClient):
             "Content-Type": "application/json",
         }
 
-    def reset(self) -> None:
-        """清空对话历史。"""
-        self._messages.clear()
-
-    def chat(self, prompt: str, system: str | None = None) -> str:
-        """发送一条消息并返回模型回复。"""
-        if system and not self._messages:
-            self._messages.append({"role": "system", "content": system})
-
-        self._messages.append({"role": "user", "content": prompt})
-
+    def _send(self) -> str:
+        """调用 DeepSeek API，发送当前消息历史并返回回复文本。"""
         body = {
             "model": self.model,
             "messages": self._messages,
@@ -47,6 +38,4 @@ class DeepSeekClient(BaseLLMClient):
             resp.raise_for_status()
 
         data = resp.json()
-        reply = data["choices"][0]["message"]["content"]
-        self._messages.append({"role": "assistant", "content": reply})
-        return reply
+        return data["choices"][0]["message"]["content"]
