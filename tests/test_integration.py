@@ -180,6 +180,7 @@ class TestBaseLLMClient(unittest.TestCase):
             self.assertTrue(hasattr(cls, "_send"), f"{cls.__name__} 缺少 _send 方法")
             self.assertTrue(hasattr(cls, "chat"), f"{cls.__name__} 缺少 chat 方法")
             self.assertTrue(hasattr(cls, "add_message"), f"{cls.__name__} 缺少 add_message 方法")
+            self.assertTrue(hasattr(cls, "register_tool"), f"{cls.__name__} 缺少 register_tool 方法")
 
     def test_history_returns_copy_not_reference(self):
         client = create_client("deepseek")
@@ -218,11 +219,74 @@ class TestBaseLLMClient(unittest.TestCase):
         client.add_message("assistant", "好的小明，我记住了！")
         # 现在问 —— 不走 chat 的 system 参数，直接用 _send
         client.add_message("user", "我叫什么名字？你的名字是什么？")
-        reply = client._send()
+        reply = client._send().get("content", "")
         client.add_message("assistant", reply)
         self.assertIn("小明", reply)
         self.assertIn("小Q", reply)
         client.reset()
+
+
+# ── Tool Use 集成测试（真实 API 调用）────────────────────────
+
+class TestToolUse(unittest.TestCase):
+    """端到端测试：工具注册、模型调用工具、结果回传。
+
+    这些测试会真实调用 DeepSeek API，需要有效的 api_key。
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.client = create_client("deepseek")
+
+    def setUp(self):
+        self.client.reset()
+
+    # 注册两个简单工具
+    @staticmethod
+    def get_weather(city: str) -> str:
+        """获取指定城市的天气。"""
+        weather_db = {"北京": "晴天 25°C", "上海": "多云 28°C", "深圳": "阵雨 30°C"}
+        return weather_db.get(city, f"未找到 {city} 的天气信息")
+
+    @staticmethod
+    def calculate(expression: str) -> str:
+        """计算数学表达式。"""
+        try:
+            return str(eval(expression))
+        except Exception:
+            return "计算错误"
+
+    def test_register_tool(self):
+        self.client.register_tool(self.get_weather, description="获取指定城市的天气")
+        self.client.register_tool(self.calculate, description="计算数学表达式")
+        self.assertIn("get_weather", self.client.tools)
+        self.assertIn("calculate", self.client.tools)
+
+    def test_tool_use_weather(self):
+        """模型应调用 get_weather 工具获取天气。"""
+        self.client.register_tool(self.get_weather, description="获取指定城市的天气")
+        reply = self.client.chat("北京今天天气怎么样？", use_tools=True)
+        self.assertIn("25", reply)
+        self.assertIn("晴", reply)
+
+    def test_tool_use_calculate(self):
+        """模型应调用 calculate 工具做数学题。"""
+        self.client.register_tool(self.calculate, description="计算数学表达式")
+        reply = self.client.chat("123 * 456 等于多少？请用工具计算", use_tools=True)
+        self.assertIn("56088", reply)
+
+    def test_tool_use_without_tools_flag(self):
+        """use_tools=False 时不调用工具，模型应自行回答。"""
+        self.client.register_tool(self.calculate, description="计算数学表达式")
+        reply = self.client.chat("1+1=?", use_tools=False)
+        self.assertIn("2", reply)
+
+    def test_tool_use_history_contains_tool_messages(self):
+        """tool_use 后历史中应包含 tool role 的消息。"""
+        self.client.register_tool(self.get_weather, description="获取指定城市的天气")
+        self.client.chat("深圳天气怎么样？", use_tools=True)
+        roles = {m["role"] for m in self.client.history}
+        self.assertIn("tool", roles)
 
 
 # ── 运行入口 ──────────────────────────────────────────────────

@@ -14,8 +14,11 @@ pip install openai
 llm/
 ├── base.py        # BaseLLMClient 抽象基类
 ├── deepseek.py    # DeepSeek API 实现
-├── openai.py      # OpenAI API 实现（预留）
-└── factory.py     # 工厂 + 提供商注册表
+├── openai.py      # OpenAI API 实现
+├── factory.py     # 工厂 + 提供商注册表
+└── tools/         # 工具定义与注册
+    ├── __init__.py
+    └── registry.py  # ToolRegistry + @tool 装饰器
 ```
 
 ## 设计
@@ -48,17 +51,26 @@ from llm import create_client
 client = create_client()             # 使用默认提供商（config.toml 中配置）
 client = create_client("deepseek")   # 指定提供商
 
-# 便捷对话
+# ── 便捷对话 ──
 reply = client.chat("你好")                        # 自动 user → API → assistant
 reply = client.chat("你好", system="你是翻译官")    # 带系统提示词
 
-# 手动注入任意角色
+# ── 手动注入任意角色 ──
 client.add_message("system", "你是一个数学老师")
 client.add_message("user", "1+1=?")
 client.add_message("assistant", "答案是 2")
 client.add_message("user", "那 2+2 呢？")
-reply = client._send()                             # 直接调 API
-client.add_message("assistant", reply)
+msg = client._send()                               # 返回 {"content": ..., "tool_calls": ...}
+client.add_message("assistant", msg["content"])
+
+# ── Tool Use（function calling）──
+def get_weather(city: str) -> str:
+    weather = {"北京": "晴天 25°C", "上海": "多云 28°C"}
+    return weather.get(city, "未知城市")
+
+client.register_tool(get_weather, description="获取指定城市的天气")
+reply = client.chat("北京天气怎么样？", use_tools=True)
+# 模型会自动调用 get_weather("北京")，将结果送回，最终输出自然语言回复
 
 client.reset()  # 清空历史
 ```

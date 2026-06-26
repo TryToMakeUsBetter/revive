@@ -22,6 +22,7 @@ python -m unittest tests.test_integration.TestConfigModule.test_load_config_retu
 | `TestConfigModule` | 配置加载、默认值、环境变量覆盖、异常路径 | 否 |
 | `TestFactory` | 客户端工厂创建、提供商注册、空 key 校验 | 否 |
 | `TestDeepSeekIntegration` | 单轮/多轮对话、上下文记忆、system prompt、reset 等 | **是**（真实 API） |
+| `TestToolUse` | 工具注册、天气查询、数学计算、tool_use 循环、历史记录 | **是**（真实 API） |
 | `TestBaseLLMClient` | 抽象类不可实例化、接口完整性、history 隔离、add_message 全 role 支持、预置对话注入 | 否 |
 
 ## 前提条件

@@ -22,11 +22,23 @@ class OpenAIClient(BaseLLMClient):
             **kwargs,
         )
 
-    def _send(self) -> str:
-        """调用 OpenAI API，发送当前消息历史并返回回复文本。"""
-        response = self._client.chat.completions.create(
-            model=self.model,
-            messages=self._messages,
-            stream=False,
-        )
-        return response.choices[0].message.content
+    def _send(self, tools: list[dict] | None = None) -> dict:
+        """调用 OpenAI API，发送当前消息历史并返回消息对象。"""
+        kwargs = {"model": self.model, "messages": self._messages, "stream": False}
+        if tools:
+            kwargs["tools"] = tools
+
+        response = self._client.chat.completions.create(**kwargs)
+        choice = response.choices[0].message
+
+        result: dict = {"content": choice.content, "tool_calls": None}
+        if choice.tool_calls:
+            result["tool_calls"] = [
+                {
+                    "id": tc.id,
+                    "type": "function",
+                    "function": {"name": tc.function.name, "arguments": tc.function.arguments},
+                }
+                for tc in choice.tool_calls
+            ]
+        return result
