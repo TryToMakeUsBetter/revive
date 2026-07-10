@@ -3,3 +3,4 @@ config.toml
 .claude/*
 AGENTS.md
 CLAUDE.md
+charts_output/*

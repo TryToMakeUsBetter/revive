@@ -341,17 +341,22 @@ def generate_chart(
 
 # ── 工厂函数：批量注册 ───────────────────────────────────────
 
-def register_chart_tools(registry: object) -> None:
+def register_chart_tools(registry: object, charts_dir: str | None = None) -> None:
     """将图表相关工具批量注册到 ToolRegistry 中。
 
     Args:
         registry: ToolRegistry 实例。
+        charts_dir: 图表输出目录的绝对路径。如果提供，LLM 会将图表保存到此目录。
     """
-    registry.register(
-        generate_chart,
-        description=(
-            "生成数据可视化图表并保存为图片文件。支持三种类型："
-            "pie（饼图，适合占比展示）、bar（柱状图/直方图，适合数值对比）、"
-            "line（折线图，适合趋势展示）。"
-        ),
+    desc = (
+        "生成数据可视化图表并保存为图片文件。支持三种类型："
+        "pie（饼图，适合占比展示）、bar（柱状图/直方图，适合数值对比）、"
+        "line（折线图，适合趋势展示）。"
     )
+    if charts_dir:
+        desc += (
+            f" output_path 请使用绝对路径，保存到 {charts_dir}/ 目录下，"
+            f"文件名格式为 chart_<简短描述>_<时间戳>.png"
+        )
+
+    registry.register(generate_chart, description=desc)
