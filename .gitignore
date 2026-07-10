@@ -1,2 +1,5 @@
 config.toml
 *.pyc
+.claude/*
+AGENTS.md
+CLAUDE.md

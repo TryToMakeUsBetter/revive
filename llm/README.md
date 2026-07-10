@@ -5,7 +5,7 @@
 ## 依赖
 
 ```bash
-pip install openai
+pip install openai matplotlib
 ```
 
 ## 架构
@@ -17,8 +17,7 @@ llm/
 ├── openai.py      # OpenAI API 实现
 ├── factory.py     # 工厂 + 提供商注册表
 └── tools/         # 工具定义与注册
-    ├── __init__.py
-    └── registry.py  # ToolRegistry + @tool 装饰器
+    ├── __init__.py    ├── chart.py      # 图表生成工具（饼图/柱状图/折线图）    └── registry.py  # ToolRegistry + @tool 装饰器
 ```
 
 ## 设计
@@ -74,6 +73,47 @@ reply = client.chat("北京天气怎么样？", use_tools=True)
 
 client.reset()  # 清空历史
 ```
+
+## 内置工具
+
+### 图表生成（chart）
+
+`ChartTool` 提供饼图、柱状图、折线图生成，基于 matplotlib（Agg 后端，无需 GUI），自动适配中文字体。
+
+```python
+from llm.tools import ChartTool, generate_chart, register_chart_tools
+
+# ── 直接调用 ──
+path = ChartTool.pie(["技术部", "市场部"], [500, 300], title="部门预算")
+path = ChartTool.bar(["Q1", "Q2", "Q3"], [120, 200, 150], title="季度销售")
+path = ChartTool.line(["1月", "2月", "3月"], [10, 25, 15], title="月度趋势")
+
+# ── 统一入口（推荐用于 ToolRegistry 注册）──
+result = generate_chart("pie", ["A", "B"], [30, 70], title="占比", output_path="out.png")
+# → {"success": true, "path": "/abs/path/out.png", "chart_type": "pie"}
+
+# ── 注册到 LLM 客户端 ──
+register_chart_tools(client._tool_registry)
+# 或
+client.register_tool(generate_chart, description="生成饼图/柱状图/折线图")
+
+# ── 对话中调用 ──
+reply = client.chat(
+    "请帮我画一张饼图：技术部=500, 市场部=300, 行政部=200，标题='部门预算'",
+    use_tools=True,
+)
+# 模型自动调用 generate_chart → 生成图片 → 回复用户
+```
+
+**支持的图表类型：**
+
+| chart_type | 说明 | 特殊参数 |
+|---|---|---|
+| `pie` | 饼图（占比展示） | `autopct`, `startangle` |
+| `bar` | 柱状图（数值对比） | `xlabel`, `ylabel`, `color` |
+| `line` | 折线图（趋势展示） | `xlabel`, `ylabel`, `color`, `marker` |
+
+**支持的输出格式：** `.png` / `.jpg` / `.svg` / `.pdf`
 
 ## 添加新模型
 
