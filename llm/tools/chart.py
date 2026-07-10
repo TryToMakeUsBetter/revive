@@ -264,35 +264,13 @@ def generate_chart(
     startangle: int = 90,
     marker: str = "o",
 ) -> str:
-    """生成饼图、柱状图或折线图并保存为图片文件。
-
-    根据 chart_type 自动选择对应的图表类型。该函数设计为可直接注册到
-    ToolRegistry，供 LLM 通过 function calling 调用。
-
-    Args:
-        chart_type: 图表类型，可选 "pie" / "bar" / "line"。
-        labels: 数据标签（类别）列表。
-        values: 数据值列表，与 labels 一一对应。
-        title: 图表标题。
-        xlabel: X 轴标签（仅 bar / line 有效）。
-        ylabel: Y 轴标签（仅 bar / line 有效）。
-        output_path: 输出文件路径，默认 "chart.png"。
-        color: 自定义颜色（bar/line），为空则使用默认色。
-        autopct: 饼图百分比格式（仅 pie）。
-        startangle: 饼图起始角度（仅 pie）。
-        marker: 折线图数据点标记（仅 line）。
-
-    Returns:
-        JSON 字符串，包含 success (bool)、path (str)、chart_type (str)。
-        失败时返回 error 字段。
-    """
+    """生成饼图、柱状图或折线图并保存为图片文件。"""
     if chart_type not in _VALID_CHART_TYPES:
         return json.dumps({
             "success": False,
             "error": f"不支持的图表类型: {chart_type}，可选: {', '.join(sorted(_VALID_CHART_TYPES))}",
         }, ensure_ascii=False)
 
-    # 归一化：LLM 可能把列表参数传成逗号分隔字符串
     labels = _normalize_list(labels, str)
     values = _normalize_list(values, float)
 
@@ -323,14 +301,21 @@ def generate_chart(
                 kwargs["color"] = color
             path = ChartTool.line(labels, values, **kwargs)
         else:
-            # 前面已校验，此处为防御性编程
             raise ValueError(f"未知图表类型: {chart_type}")
 
-        return json.dumps({
-            "success": True,
-            "path": path,
-            "chart_type": chart_type,
-        }, ensure_ascii=False)
+        # 计算相对路径和 URL（如果 output_path 在 charts_dir 下）
+        base_dir = os.environ.get("REVIVE_CHARTS_DIR", "")
+        base_url = os.environ.get("REVIVE_CHARTS_URL", "")
+        result: dict = {"success": True, "path": path, "chart_type": chart_type}
+        if base_dir and base_url:
+            try:
+                rel = os.path.relpath(path, base_dir)
+                if not rel.startswith(".."):
+                    result["url"] = f"{base_url.rstrip('/')}/{rel}"
+            except ValueError:
+                pass
+
+        return json.dumps(result, ensure_ascii=False)
 
     except Exception as e:
         return json.dumps({
@@ -341,22 +326,27 @@ def generate_chart(
 
 # ── 工厂函数：批量注册 ───────────────────────────────────────
 
-def register_chart_tools(registry: object, charts_dir: str | None = None) -> None:
+def register_chart_tools(registry: object, charts_dir: str | None = None,
+                       charts_url: str = "/charts") -> None:
     """将图表相关工具批量注册到 ToolRegistry 中。
 
     Args:
         registry: ToolRegistry 实例。
-        charts_dir: 图表输出目录的绝对路径。如果提供，LLM 会将图表保存到此目录。
+        charts_dir: 图表输出目录的绝对路径。设置环境变量 REVIVE_CHARTS_DIR。
+        charts_url: 图表访问的基础 URL。设置环境变量 REVIVE_CHARTS_URL。
     """
+    if charts_dir:
+        os.environ["REVIVE_CHARTS_DIR"] = charts_dir
+    if charts_url:
+        os.environ["REVIVE_CHARTS_URL"] = charts_url
+
     desc = (
-        "生成数据可视化图表并保存为图片文件。支持三种类型："
-        "pie（饼图，适合占比展示）、bar（柱状图/直方图，适合数值对比）、"
-        "line（折线图，适合趋势展示）。"
+        "生成数据可视化图表。支持 pie（饼图）、bar（柱状图）、line（折线图）。"
     )
     if charts_dir:
         desc += (
-            f" output_path 请使用绝对路径，保存到 {charts_dir}/ 目录下，"
-            f"文件名格式为 chart_<简短描述>_<时间戳>.png"
+            f" output_path 使用 {charts_dir}/chart_<描述>.png 格式。"
+            f" 生成成功后，工具返回的 url 字段即图片可访问地址，请用此 url 在回复中展示图片。"
         )
 
     registry.register(generate_chart, description=desc)
